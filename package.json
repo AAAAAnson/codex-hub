@@ -1,5 +1,5 @@
 {
-  "name": "@aaaaanson/codex-hub",
+  "name": "@mbluo/codex-hub",
   "version": "0.1.0",
   "description": "Codex CLI TUI HUD installer for context and usage status bars.",
   "type": "module",
