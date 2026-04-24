@@ -25,7 +25,7 @@ Codex Hub reads the same live runtime snapshots that Codex TUI receives from the
 It does not scrape local session logs to calculate quota. The installed TUI refreshes usage in the background and also updates when Codex emits fresh token or rate-limit events.
 
 **Requirements**
-- Windows PowerShell.
+- Windows PowerShell or macOS Terminal.
 - Git.
 - Rust and Cargo.
 - Node and npm.
@@ -56,12 +56,23 @@ Run the installer:
 codex-hub install
 ```
 
-By default, `codex-hub install` uses `C:\src\codex-source` as the Codex source checkout. If that path does not exist, it clones `https://github.com/openai/codex.git` there. A short path is used because the Codex source tree contains long snapshot filenames that can hit Windows path-length limits.
+By default, `codex-hub install` clones or reuses the Codex source checkout at:
+
+- Windows: `C:\src\codex-source`
+- macOS: `~/src/codex-source`
+
+A short path is used on Windows because the Codex source tree contains long snapshot filenames that can hit path-length limits.
 
 If you already have a Codex source checkout:
 
 ```powershell
 codex-hub install --codex-source C:\src\codex-source
+```
+
+On macOS:
+
+```bash
+codex-hub install --codex-source ~/src/codex-source
 ```
 
 Optional release build:
@@ -75,8 +86,8 @@ The installer:
 - Clones or reuses a Codex source checkout.
 - Applies `patches/codex-hub.patch`.
 - Builds `codex-cli`.
-- Copies the built binary as `codex-hub.exe` next to the npm-managed Codex binary.
-- Updates the npm launcher to prefer `codex-hub.exe` when present, and fall back to the bundled Codex binary otherwise.
+- Copies the built binary next to the npm-managed Codex binary as `codex-hub.exe` on Windows or `codex-hub` on macOS.
+- Updates the npm launcher to prefer the Codex Hub binary when present, and fall back to the bundled Codex binary otherwise.
 - Adds `codex-hud` to your Codex TUI `status_line` config unless you pass `--no-configure`.
 
 **Use**
@@ -136,6 +147,14 @@ cd codex-hub
 .\scripts\install.ps1 -CodexSource C:\src\codex-source
 ```
 
+On macOS:
+
+```bash
+git clone https://github.com/AAAAAnson/codex-hub.git
+cd codex-hub
+bash ./scripts/install.sh --codex-source ~/src/codex-source
+```
+
 **Author**
 [AAAAAnson](https://github.com/AAAAAnson)
 
@@ -144,5 +163,5 @@ Codex Hub does not add telemetry. It only renders data already available inside 
 
 **Notes**
 - The patch targets the Codex TUI source layout used during development.
-- The installer is Windows-first because the launcher patch and binary name are Windows-oriented.
+- Windows and macOS installers are supported. Linux may work with the shell scripts, but it is not validated yet.
 - This is an unofficial community package, not an OpenAI project.

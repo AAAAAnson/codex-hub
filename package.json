@@ -1,6 +1,6 @@
 {
   "name": "codex-hub-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Codex CLI TUI HUD installer for context and usage status bars.",
   "type": "module",
   "bin": {

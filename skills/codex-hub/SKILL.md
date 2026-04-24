@@ -15,10 +15,23 @@ Default display:
 Context █████ 81% │ Usage █░░░░░░░░░ 5% (4h 41m / 5h) │ Weekly ████░░░░░░ 43% (5d 8h / 7d)
 ```
 
-Install on Windows:
+Install with npm:
+
+```powershell
+npm install -g codex-hub-cli
+codex-hub install
+```
+
+Direct source install on Windows:
 
 ```powershell
 .\scripts\install.ps1 -CodexSource <path-to-codex-source>
+```
+
+Direct source install on macOS:
+
+```bash
+bash ./scripts/install.sh --codex-source <path-to-codex-source>
 ```
 
 After installation, configure Codex:
