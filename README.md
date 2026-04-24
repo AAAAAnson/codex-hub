@@ -47,7 +47,7 @@ npm install -g github:AAAAAnson/codex-hub
 After the npm registry package is published, this will also work:
 
 ```powershell
-npm install -g @mbluo/codex-hub
+npm install -g codex-hub-cli
 ```
 
 Run the installer:
