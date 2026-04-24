@@ -111,6 +111,11 @@ Check that Codex still starts:
 codex --help
 ```
 
+**Validation**
+Every push runs package checks on Windows and macOS. The repository also includes a manual GitHub Actions workflow named `full macOS build` for a heavier macOS install test.
+
+That manual workflow installs the real `@openai/codex` npm package, checks out OpenAI Codex source, applies the Codex Hub patch, runs a real Rust build, verifies the patched launcher, and verifies uninstall cleanup.
+
 **Manual Config**
 If you installed with `--no-configure`, add this to your Codex config:
 

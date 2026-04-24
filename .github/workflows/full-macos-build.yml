@@ -1,0 +1,119 @@
+name: full macOS build
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      codex_ref:
+        description: OpenAI Codex git ref to test.
+        required: true
+        default: main
+      codex_npm_version:
+        description: npm version of @openai/codex to install.
+        required: true
+        default: latest
+      release:
+        description: Build Codex Hub with the release profile.
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  full-macos-build:
+    name: full macOS install with real cargo
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Configure tools
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rustup default stable
+          npm config set prefix "$RUNNER_TEMP/npm-global"
+          echo "$RUNNER_TEMP/npm-global/bin" >> "$GITHUB_PATH"
+
+          node --version
+          npm --version
+          rustc --version
+          cargo --version
+
+      - name: Install Codex npm package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npm install -g "@openai/codex@${{ inputs.codex_npm_version }}"
+          codex --version
+
+          codex_npm_root="$(npm root -g)/@openai/codex"
+          test -f "$codex_npm_root/bin/codex.js"
+          echo "CODEX_NPM_ROOT=$codex_npm_root" >> "$GITHUB_ENV"
+
+      - name: Clone Codex source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          codex_source="$RUNNER_TEMP/codex-source"
+          git init "$codex_source"
+          git -C "$codex_source" remote add origin https://github.com/openai/codex.git
+          git -C "$codex_source" fetch --depth 1 origin "${{ inputs.codex_ref }}"
+          git -C "$codex_source" checkout --detach FETCH_HEAD
+
+          echo "CODEX_SOURCE=$codex_source" >> "$GITHUB_ENV"
+          git -C "$codex_source" rev-parse --short HEAD
+
+      - name: Run full Codex Hub installer
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          args=(
+            install
+            --codex-source "$CODEX_SOURCE"
+            --npm-root "$CODEX_NPM_ROOT"
+            --no-configure
+          )
+
+          if [[ "${{ inputs.release }}" == "true" ]]; then
+            args+=(--release)
+          fi
+
+          node ./bin/codex-hub.js "${args[@]}"
+
+      - name: Verify patched launcher and built binary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node ./bin/codex-hub.js status --npm-root "$CODEX_NPM_ROOT" --json
+          grep -q 'codexHubBinaryPath' "$CODEX_NPM_ROOT/bin/codex.js"
+
+          hud_binary="$(find "$CODEX_NPM_ROOT" -type f -path '*/vendor/*/codex/codex-hub' -print -quit)"
+          test -n "$hud_binary"
+          test -x "$hud_binary"
+
+          node "$CODEX_NPM_ROOT/bin/codex.js" --version
+
+      - name: Verify uninstall restores launcher and source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node ./bin/codex-hub.js uninstall \
+            --codex-source "$CODEX_SOURCE" \
+            --npm-root "$CODEX_NPM_ROOT"
+
+          ! grep -q 'codexHubBinaryPath' "$CODEX_NPM_ROOT/bin/codex.js"
+          test -z "$(find "$CODEX_NPM_ROOT" -type f -path '*/vendor/*/codex/codex-hub' -print -quit)"
+          git -C "$CODEX_SOURCE" diff --exit-code
