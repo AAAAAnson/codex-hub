@@ -1,0 +1,47 @@
+{
+  "name": "@aaaaanson/codex-hub",
+  "version": "0.1.0",
+  "description": "Codex CLI TUI HUD installer for context and usage status bars.",
+  "type": "module",
+  "bin": {
+    "codex-hub": "bin/codex-hub.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "patches/",
+    "scripts/",
+    "skills/",
+    ".codex-plugin/",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "test": "node ./bin/codex-hub.js --help && node ./bin/codex-hub.js status --json",
+    "pack:check": "npm pack --dry-run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AAAAAnson/codex-hub.git"
+  },
+  "homepage": "https://github.com/AAAAAnson/codex-hub#readme",
+  "bugs": {
+    "url": "https://github.com/AAAAAnson/codex-hub/issues"
+  },
+  "keywords": [
+    "codex",
+    "codex-cli",
+    "hud",
+    "statusline",
+    "tui"
+  ],
+  "author": "AAAAAnson",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

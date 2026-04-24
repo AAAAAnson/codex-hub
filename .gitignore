@@ -5,6 +5,8 @@ dist/
 *.dll
 *.pdb
 *.log
+*.tgz
+npm-debug.log*
 *.tmp
 *.bak
 *.bak-*
