@@ -1,0 +1,604 @@
+diff --git a/codex-rs/tui/src/app.rs b/codex-rs/tui/src/app.rs
+index 8a90924..5012bfb 100644
+--- a/codex-rs/tui/src/app.rs
++++ b/codex-rs/tui/src/app.rs
+@@ -324,2 +324,3 @@ fn auto_review_mode() -> AutoReviewMode {
+ const COMMIT_ANIMATION_TICK: Duration = tui::TARGET_FRAME_INTERVAL;
++const RATE_LIMIT_POLL_INTERVAL: Duration = Duration::from_secs(60);
+ 
+@@ -515,2 +516,4 @@ pub(crate) struct App {
+     pub(crate) commit_anim_running: Arc<AtomicBool>,
++    rate_limit_poll_task: Option<JoinHandle<()>>,
++    background_rate_limit_refresh_in_flight: bool,
+     // Shared across ChatWidget instances so invalid status-line config warnings only emit once.
+@@ -634,2 +637,22 @@ impl App {
+ 
++    fn start_rate_limit_polling(&mut self, interval: Duration) {
++        self.stop_rate_limit_polling();
++
++        let app_event_tx = self.app_event_tx.clone();
++        self.rate_limit_poll_task = Some(tokio::spawn(async move {
++            loop {
++                tokio::time::sleep(interval).await;
++                app_event_tx.send(AppEvent::RefreshRateLimits {
++                    origin: RateLimitRefreshOrigin::BackgroundPoll,
++                });
++            }
++        }));
++    }
++
++    fn stop_rate_limit_polling(&mut self) {
++        if let Some(task) = self.rate_limit_poll_task.take() {
++            task.abort();
++        }
++    }
++
+     #[allow(clippy::too_many_arguments)]
+@@ -896,2 +919,4 @@ impl App {
+             commit_anim_running: Arc::new(AtomicBool::new(false)),
++            rate_limit_poll_task: None,
++            background_rate_limit_refresh_in_flight: false,
+             status_line_invalid_items_warned: status_line_invalid_items_warned.clone(),
+@@ -960,2 +985,3 @@ impl App {
+             app.refresh_rate_limits(&app_server, RateLimitRefreshOrigin::StartupPrefetch);
++            app.start_rate_limit_polling(RATE_LIMIT_POLL_INTERVAL);
+         }
+@@ -1146,2 +1172,3 @@ impl Drop for App {
+     fn drop(&mut self) {
++        self.stop_rate_limit_polling();
+         if let Err(err) = self.chat_widget.clear_managed_terminal_title() {
+diff --git a/codex-rs/tui/src/app/background_requests.rs b/codex-rs/tui/src/app/background_requests.rs
+index 80879db..6a61778 100644
+--- a/codex-rs/tui/src/app/background_requests.rs
++++ b/codex-rs/tui/src/app/background_requests.rs
+@@ -36,2 +36,9 @@ impl App {
+     ) {
++        if origin.is_background() {
++            if self.background_rate_limit_refresh_in_flight {
++                return;
++            }
++            self.background_rate_limit_refresh_in_flight = true;
++        }
++
+         let request_handle = app_server.request_handle();
+@@ -46,2 +53,8 @@ impl App {
+ 
++    pub(super) fn finish_rate_limit_refresh(&mut self, origin: RateLimitRefreshOrigin) {
++        if origin.is_background() {
++            self.background_rate_limit_refresh_in_flight = false;
++        }
++    }
++
+     pub(super) fn send_add_credits_nudge_email(
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index 2c6c39a..da8b488 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -485,12 +485,23 @@ impl App {
+             }
+-            AppEvent::RateLimitsLoaded { origin, result } => match result {
+-                Ok(snapshots) => {
+-                    for snapshot in snapshots {
+-                        self.chat_widget.on_rate_limit_snapshot(Some(snapshot));
+-                    }
+-                    match origin {
+-                        RateLimitRefreshOrigin::StartupPrefetch => {
+-                            tui.frame_requester().schedule_frame();
++            AppEvent::RateLimitsLoaded { origin, result } => {
++                self.finish_rate_limit_refresh(origin);
++                match result {
++                    Ok(snapshots) => {
++                        for snapshot in snapshots {
++                            self.chat_widget.on_rate_limit_snapshot(Some(snapshot));
++                        }
++                        match origin {
++                            RateLimitRefreshOrigin::StartupPrefetch
++                            | RateLimitRefreshOrigin::BackgroundPoll => {
++                                tui.frame_requester().schedule_frame();
++                            }
++                            RateLimitRefreshOrigin::StatusCommand { request_id } => {
++                                self.chat_widget
++                                    .finish_status_rate_limit_refresh(request_id);
++                            }
+                         }
+-                        RateLimitRefreshOrigin::StatusCommand { request_id } => {
++                    }
++                    Err(err) => {
++                        tracing::warn!("account/rateLimits/read failed during TUI refresh: {err}");
++                        if let RateLimitRefreshOrigin::StatusCommand { request_id } = origin {
+                             self.chat_widget
+@@ -500,10 +511,3 @@ impl App {
+                 }
+-                Err(err) => {
+-                    tracing::warn!("account/rateLimits/read failed during TUI refresh: {err}");
+-                    if let RateLimitRefreshOrigin::StatusCommand { request_id } = origin {
+-                        self.chat_widget
+-                            .finish_status_rate_limit_refresh(request_id);
+-                    }
+-                }
+-            },
++            }
+             AppEvent::ConnectorsLoaded { result, is_final } => {
+diff --git a/codex-rs/tui/src/app/test_support.rs b/codex-rs/tui/src/app/test_support.rs
+index 4dc724e..30832f8 100644
+--- a/codex-rs/tui/src/app/test_support.rs
++++ b/codex-rs/tui/src/app/test_support.rs
+@@ -34,2 +34,4 @@ pub(super) async fn make_test_app() -> App {
+         commit_anim_running: Arc::new(AtomicBool::new(false)),
++        rate_limit_poll_task: None,
++        background_rate_limit_refresh_in_flight: false,
+         status_line_invalid_items_warned: Arc::new(AtomicBool::new(false)),
+diff --git a/codex-rs/tui/src/app/tests.rs b/codex-rs/tui/src/app/tests.rs
+index b214197..790ae2f 100644
+--- a/codex-rs/tui/src/app/tests.rs
++++ b/codex-rs/tui/src/app/tests.rs
+@@ -497,2 +497,23 @@ async fn reset_thread_event_state_aborts_listener_tasks() {
+ 
++#[tokio::test]
++async fn rate_limit_poller_emits_background_refresh_events() {
++    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
++
++    app.start_rate_limit_polling(Duration::from_millis(10));
++
++    let event = time::timeout(Duration::from_millis(100), app_event_rx.recv())
++        .await
++        .expect("timed out waiting for rate-limit poll event")
++        .expect("app event channel should stay open");
++
++    assert_matches!(
++        event,
++        AppEvent::RefreshRateLimits {
++            origin: RateLimitRefreshOrigin::BackgroundPoll
++        }
++    );
++
++    app.stop_rate_limit_polling();
++}
++
+ #[tokio::test]
+@@ -3654,2 +3675,4 @@ async fn make_test_app() -> App {
+         commit_anim_running: Arc::new(AtomicBool::new(false)),
++        rate_limit_poll_task: None,
++        background_rate_limit_refresh_in_flight: false,
+         status_line_invalid_items_warned: Arc::new(AtomicBool::new(false)),
+@@ -3711,2 +3734,4 @@ async fn make_test_app_with_channels() -> (
+             commit_anim_running: Arc::new(AtomicBool::new(false)),
++            rate_limit_poll_task: None,
++            background_rate_limit_refresh_in_flight: false,
+             status_line_invalid_items_warned: Arc::new(AtomicBool::new(false)),
+diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
+index 8654684..fd0bbe0 100644
+--- a/codex-rs/tui/src/app_event.rs
++++ b/codex-rs/tui/src/app_event.rs
+@@ -97,2 +97,4 @@ pub(crate) enum RateLimitRefreshOrigin {
+     StartupPrefetch,
++    /// Periodic background refresh used by status-line HUD surfaces.
++    BackgroundPoll,
+     /// User-initiated via `/status`; the `request_id` correlates with the
+@@ -102,2 +104,8 @@ pub(crate) enum RateLimitRefreshOrigin {
+ 
++impl RateLimitRefreshOrigin {
++    pub(crate) fn is_background(self) -> bool {
++        matches!(self, Self::StartupPrefetch | Self::BackgroundPoll)
++    }
++}
++
+ #[allow(clippy::large_enum_variant)]
+diff --git a/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__status_line_setup__tests__setup_view_snapshot_uses_runtime_preview_values.snap b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__status_line_setup__tests__setup_view_snapshot_uses_runtime_preview_values.snap
+index ff93e83..c344de1 100644
+--- a/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__status_line_setup__tests__setup_view_snapshot_uses_runtime_preview_values.snap
++++ b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__status_line_setup__tests__setup_view_snapshot_uses_runtime_preview_values.snap
+@@ -2,2 +2,3 @@
+ source: tui/src/bottom_pane/status_line_setup.rs
++assertion_line: 557
+ expression: "render_lines(&view, 72)"
+@@ -13,2 +14,3 @@ expression: "render_lines(&view, 72)"
+   [x] git-branch            Current Git branch (omitted when unavaila…  
++  [ ] codex-hud             Compact Codex HUD with context and usage …  
+   [ ] model-with-reasoning  Current model name with reasoning level     
+@@ -17,3 +19,2 @@ expression: "render_lines(&view, 72)"
+   [ ] context-remaining     Percentage of context window remaining (o…  
+-  [ ] context-used          Percentage of context window used (omitte…  
+                                                                         
+diff --git a/codex-rs/tui/src/bottom_pane/status_line_setup.rs b/codex-rs/tui/src/bottom_pane/status_line_setup.rs
+index ea522f3..c3a7b43 100644
+--- a/codex-rs/tui/src/bottom_pane/status_line_setup.rs
++++ b/codex-rs/tui/src/bottom_pane/status_line_setup.rs
+@@ -50,2 +50,6 @@ use crate::render::renderable::Renderable;
+ pub(crate) enum StatusLineItem {
++    /// Compact HUD with context, usage limit, and weekly usage bars.
++    #[strum(to_string = "codex-hud", serialize = "hud")]
++    CodexHud,
++
+     /// The current model name.
+@@ -122,2 +126,3 @@ impl StatusLineItem {
+         match self {
++            StatusLineItem::CodexHud => "Compact Codex HUD with context and usage bars",
+             StatusLineItem::ModelName => "Current model name",
+@@ -160,2 +165,3 @@ impl StatusLineItem {
+         match self {
++            StatusLineItem::CodexHud => StatusSurfacePreviewItem::CodexHud,
+             StatusLineItem::ModelName => StatusSurfacePreviewItem::Model,
+@@ -333,2 +339,15 @@ mod tests {
+ 
++    #[test]
++    fn codex_hud_is_selectable_id() {
++        assert_eq!(StatusLineItem::CodexHud.to_string(), "codex-hud");
++        assert_eq!(
++            "codex-hud".parse::<StatusLineItem>(),
++            Ok(StatusLineItem::CodexHud)
++        );
++        assert_eq!(
++            "hud".parse::<StatusLineItem>(),
++            Ok(StatusLineItem::CodexHud)
++        );
++    }
++
+     #[test]
+diff --git a/codex-rs/tui/src/bottom_pane/status_surface_preview.rs b/codex-rs/tui/src/bottom_pane/status_surface_preview.rs
+index 93fca82..3cafa57 100644
+--- a/codex-rs/tui/src/bottom_pane/status_surface_preview.rs
++++ b/codex-rs/tui/src/bottom_pane/status_surface_preview.rs
+@@ -6,2 +6,3 @@ use ratatui::text::Line;
+ pub(crate) enum StatusSurfacePreviewItem {
++    CodexHud,
+     AppName,
+@@ -32,2 +33,5 @@ impl StatusSurfacePreviewItem {
+         match self {
++            StatusSurfacePreviewItem::CodexHud => {
++                "Context \u{2588}\u{2588}\u{2588}\u{2591}\u{2591} 42% \u{2502} Usage \u{2588}\u{2588}\u{2588}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591} 25% (2h / 5h) \u{2502} Weekly \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2591}\u{2591}\u{2591}\u{2591} 60% (3d 4h / 7d)"
++            }
+             StatusSurfacePreviewItem::AppName => "codex",
+@@ -58,2 +62,3 @@ impl StatusSurfacePreviewItem {
+         [
++            Self::CodexHud,
+             Self::AppName,
+diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
+index 9e851f0..c72857b 100644
+--- a/codex-rs/tui/src/chatwidget.rs
++++ b/codex-rs/tui/src/chatwidget.rs
+@@ -369,2 +369,3 @@ use crate::text_formatting::truncate_text;
+ use crate::tui::FrameRequester;
++mod hud_status;
+ mod interrupts;
+@@ -7836,2 +7837,10 @@ impl ChatWidget {
+ 
++    fn status_line_codex_hud(&self) -> String {
++        hud_status::codex_hud_status_line(
++            self.config.codex_home.as_path(),
++            self.status_line_context_used_percent().unwrap_or(0),
++            &self.rate_limit_snapshots_by_limit_id,
++        )
++    }
++
+     fn status_line_reasoning_effort_label(effort: Option<ReasoningEffortConfig>) -> &'static str {
+diff --git a/codex-rs/tui/src/chatwidget/hud_status.rs b/codex-rs/tui/src/chatwidget/hud_status.rs
+new file mode 100644
+index 0000000..9597494
+--- /dev/null
++++ b/codex-rs/tui/src/chatwidget/hud_status.rs
+@@ -0,0 +1,185 @@
++use std::collections::BTreeMap;
++use std::path::Path;
++
++use crate::status::RateLimitSnapshotDisplay;
++use crate::status::RateLimitWindowDisplay;
++
++const HUD_SEPARATOR: &str = " \u{2502} ";
++
++pub(crate) fn codex_hud_status_line(
++    _codex_home: &Path,
++    context_used_percent: i64,
++    rate_limit_snapshots_by_limit_id: &BTreeMap<String, RateLimitSnapshotDisplay>,
++) -> String {
++    let context_used_percent = context_used_percent.clamp(0, 100);
++    let mut parts = vec![format!(
++        "Context {} {context_used_percent}%",
++        context_hud_bar(context_used_percent as f64)
++    )];
++
++    let live_limits = rate_limit_snapshots_by_limit_id.get("codex");
++
++    parts.push(hud_usage_segment(
++        "Usage",
++        live_limits.and_then(|snapshot| snapshot.primary.as_ref()),
++        /*default_window_minutes*/ 300,
++    ));
++    parts.push(hud_usage_segment(
++        "Weekly",
++        live_limits.and_then(|snapshot| snapshot.secondary.as_ref()),
++        /*default_window_minutes*/ 10_080,
++    ));
++
++    parts.join(HUD_SEPARATOR)
++}
++
++fn hud_usage_segment(
++    label: &str,
++    window: Option<&RateLimitWindowDisplay>,
++    default_window_minutes: i64,
++) -> String {
++    let total_window = window
++        .and_then(|window| window.window_minutes)
++        .unwrap_or(default_window_minutes);
++    let total_window = hud_window_duration(total_window);
++
++    let Some(window) = window else {
++        return format!(
++            "{label} {} --% (-- / {total_window})",
++            usage_hud_bar(/*percent_used*/ 0.0)
++        );
++    };
++
++    let used = window.used_percent.clamp(0.0, 100.0);
++    let reset = window
++        .reset_after_seconds
++        .map(hud_remaining_duration)
++        .unwrap_or_else(|| "--".to_string());
++    format!(
++        "{label} {} {used:.0}% ({reset} / {total_window})",
++        usage_hud_bar(used)
++    )
++}
++
++fn context_hud_bar(percent_used: f64) -> String {
++    hud_bar(percent_used, /*segments*/ 5)
++}
++
++fn usage_hud_bar(percent_used: f64) -> String {
++    hud_bar(percent_used, /*segments*/ 10)
++}
++
++fn hud_bar(percent_used: f64, segments: usize) -> String {
++    const FILLED: &str = "\u{2588}";
++    const EMPTY: &str = "\u{2591}";
++
++    let percent_used = percent_used.clamp(0.0, 100.0);
++    let filled = if percent_used <= 0.0 {
++        0
++    } else {
++        ((percent_used / 100.0) * segments as f64).ceil() as usize
++    }
++    .min(segments);
++    let empty = segments.saturating_sub(filled);
++    format!("{}{}", FILLED.repeat(filled), EMPTY.repeat(empty))
++}
++
++fn hud_window_duration(window_minutes: i64) -> String {
++    const MINUTES_PER_HOUR: i64 = 60;
++    const MINUTES_PER_DAY: i64 = 24 * MINUTES_PER_HOUR;
++
++    let window_minutes = window_minutes.max(0);
++    if window_minutes >= MINUTES_PER_DAY && window_minutes % MINUTES_PER_DAY == 0 {
++        format!("{}d", window_minutes / MINUTES_PER_DAY)
++    } else if window_minutes >= MINUTES_PER_HOUR && window_minutes % MINUTES_PER_HOUR == 0 {
++        format!("{}h", window_minutes / MINUTES_PER_HOUR)
++    } else {
++        format!("{window_minutes}m")
++    }
++}
++
++fn hud_remaining_duration(seconds: i64) -> String {
++    const MINUTES_PER_HOUR: i64 = 60;
++    const MINUTES_PER_DAY: i64 = 24 * MINUTES_PER_HOUR;
++
++    let total_minutes = if seconds <= 0 { 0 } else { (seconds + 59) / 60 };
++    let days = total_minutes / MINUTES_PER_DAY;
++    let hours = (total_minutes % MINUTES_PER_DAY) / MINUTES_PER_HOUR;
++    let minutes = total_minutes % MINUTES_PER_HOUR;
++
++    if days > 0 {
++        if hours > 0 {
++            format!("{days}d {hours}h")
++        } else {
++            format!("{days}d")
++        }
++    } else if hours > 0 {
++        if minutes > 0 {
++            format!("{hours}h {minutes}m")
++        } else {
++            format!("{hours}h")
++        }
++    } else {
++        format!("{minutes}m")
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use pretty_assertions::assert_eq;
++    use serde_json::json;
++    use std::fs;
++    use tempfile::tempdir;
++
++    #[test]
++    fn hud_does_not_use_session_rate_limits_as_fresh_usage() {
++        let codex_home = tempdir().expect("create temp codex home");
++        let session_dir = codex_home.path().join("sessions/2026/04/24");
++        fs::create_dir_all(&session_dir).expect("create session dir");
++        let resets_at = chrono::Utc::now().timestamp() + 2 * 60 * 60;
++        let session_line = json!({
++            "timestamp": "2026-04-24T06:11:48.187Z",
++            "type": "event_msg",
++            "payload": {
++                "type": "token_count",
++                "info": null,
++                "rate_limits": {
++                    "limit_id": "codex",
++                    "limit_name": null,
++                    "primary": {
++                        "used_percent": 39.0,
++                        "window_minutes": 300,
++                        "resets_at": resets_at,
++                    },
++                    "secondary": {
++                        "used_percent": 43.0,
++                        "window_minutes": 10080,
++                        "resets_at": null,
++                    },
++                    "credits": null,
++                    "plan_type": "prolite",
++                    "rate_limit_reached_type": null,
++                },
++            },
++        });
++        fs::write(
++            session_dir.join("rollout-test.jsonl"),
++            format!("{}\n", session_line),
++        )
++        .expect("write session");
++
++        assert_eq!(
++            codex_hud_status_line(codex_home.path(), 81, &BTreeMap::new()),
++            "Context \u{2588}\u{2588}\u{2588}\u{2588}\u{2588} 81% \u{2502} Usage \u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591} --% (-- / 5h) \u{2502} Weekly \u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591} --% (-- / 7d)"
++        );
++    }
++
++    #[test]
++    fn hud_always_reserves_both_usage_windows_when_missing() {
++        assert_eq!(
++            codex_hud_status_line(Path::new("missing"), 42, &BTreeMap::new()),
++            "Context \u{2588}\u{2588}\u{2588}\u{2591}\u{2591} 42% \u{2502} Usage \u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591} --% (-- / 5h) \u{2502} Weekly \u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591} --% (-- / 7d)"
++        );
++    }
++}
+diff --git a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_hardcoded_only.snap b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_hardcoded_only.snap
+index f1aca37..f729d1c 100644
+--- a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_hardcoded_only.snap
++++ b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_hardcoded_only.snap
+@@ -2,2 +2,3 @@
+ source: tui/src/chatwidget/tests/status_surface_previews.rs
++assertion_line: 135
+ expression: status_line_popup_snapshot(&mut chat)
+@@ -12,2 +13,3 @@ expression: status_line_popup_snapshot(&mut chat)
+   [x] thread-title          Current thread title (omitted when unavailable)
++  [ ] codex-hud             Compact Codex HUD with context and usage bars
+   [ ] model                 Current model name
+@@ -16,3 +18,2 @@ expression: status_line_popup_snapshot(&mut chat)
+   [ ] run-state             Compact session run-state text (Ready, Working, Thinking)
+-  [ ] context-remaining     Percentage of context window remaining (omitted when unknown)
+ 
+diff --git a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_live_only.snap b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_live_only.snap
+index a5bb631..20ef4bb 100644
+--- a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_live_only.snap
++++ b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_live_only.snap
+@@ -2,2 +2,3 @@
+ source: tui/src/chatwidget/tests/status_surface_previews.rs
++assertion_line: 99
+ expression: status_line_popup_snapshot(&mut chat)
+@@ -12,2 +13,3 @@ expression: status_line_popup_snapshot(&mut chat)
+   [x] thread-title          Current thread title (omitted when unavailable)
++  [ ] codex-hud             Compact Codex HUD with context and usage bars
+   [ ] model                 Current model name
+@@ -16,3 +18,2 @@ expression: status_line_popup_snapshot(&mut chat)
+   [ ] run-state             Compact session run-state text (Ready, Working, Thinking)
+-  [ ] context-remaining     Percentage of context window remaining (omitted when unknown)
+ 
+diff --git a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_mixed.snap b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_mixed.snap
+index e44459c..7ce9ef8 100644
+--- a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_mixed.snap
++++ b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_setup_popup_mixed.snap
+@@ -2,2 +2,3 @@
+ source: tui/src/chatwidget/tests/status_surface_previews.rs
++assertion_line: 175
+ expression: status_line_popup_snapshot(&mut chat)
+@@ -12,2 +13,3 @@ expression: status_line_popup_snapshot(&mut chat)
+   [x] thread-title          Current thread title (omitted when unavailable)
++  [ ] codex-hud             Compact Codex HUD with context and usage bars
+   [ ] model                 Current model name
+@@ -16,3 +18,2 @@ expression: status_line_popup_snapshot(&mut chat)
+   [ ] run-state             Compact session run-state text (Ready, Working, Thinking)
+-  [ ] context-remaining     Percentage of context window remaining (omitted when unknown)
+ 
+diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
+index 94ed216..066827e 100644
+--- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
++++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
+@@ -422,2 +422,3 @@ impl ChatWidget {
+         match item {
++            StatusLineItem::CodexHud => Some(self.status_line_codex_hud()),
+             StatusLineItem::ModelName => Some(self.model_display_name().to_string()),
+@@ -504,2 +505,3 @@ impl ChatWidget {
+             StatusSurfacePreviewItem::AppName => return Some("codex".to_string()),
++            StatusSurfacePreviewItem::CodexHud => StatusLineItem::CodexHud,
+             StatusSurfacePreviewItem::ProjectName => return self.terminal_title_project_name(),
+diff --git a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
+index 46756a9..513c331 100644
+--- a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
++++ b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
+@@ -1328,2 +1328,44 @@ async fn status_line_legacy_context_usage_renders_context_used_percent() {
+ 
++#[tokio::test]
++async fn status_line_codex_hud_renders_bars_and_reset() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
++    chat.thread_id = Some(ThreadId::new());
++    chat.config.tui_status_line = Some(vec!["codex-hud".to_string()]);
++
++    chat.handle_codex_event(Event {
++        id: "token-usage".into(),
++        msg: EventMsg::TokenCount(TokenCountEvent {
++            info: Some(make_token_info(
++                /*total_tokens*/ 12_042, /*context_window*/ 12_100,
++            )),
++            rate_limits: None,
++        }),
++    });
++    chat.on_rate_limit_snapshot(Some(RateLimitSnapshot {
++        limit_id: None,
++        limit_name: None,
++        primary: Some(RateLimitWindow {
++            used_percent: 25.0,
++            window_minutes: Some(300),
++            resets_at: Some(chrono::Utc::now().timestamp() + 2 * 60 * 60),
++        }),
++        secondary: Some(RateLimitWindow {
++            used_percent: 60.0,
++            window_minutes: Some(10_080),
++            resets_at: Some(chrono::Utc::now().timestamp() + 3 * 24 * 60 * 60 + 4 * 60 * 60),
++        }),
++        credits: None,
++        plan_type: None,
++        rate_limit_reached_type: None,
++    }));
++
++    assert_eq!(
++        status_line_text(&chat),
++        Some(
++            "Context \u{2588}\u{2588}\u{2588}\u{2591}\u{2591} 42% \u{2502} Usage \u{2588}\u{2588}\u{2588}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591} 25% (2h / 5h) \u{2502} Weekly \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2591}\u{2591}\u{2591}\u{2591} 60% (3d 4h / 7d)"
++                .to_string()
++        )
++    );
++}
++
+ #[tokio::test]
+diff --git a/codex-rs/tui/src/status/rate_limits.rs b/codex-rs/tui/src/status/rate_limits.rs
+index 559da21..86d8a60 100644
+--- a/codex-rs/tui/src/status/rate_limits.rs
++++ b/codex-rs/tui/src/status/rate_limits.rs
+@@ -68,2 +68,4 @@ pub(crate) struct RateLimitWindowDisplay {
+     pub resets_at: Option<String>,
++    /// Seconds until reset, clamped to zero after expiry.
++    pub reset_after_seconds: Option<i64>,
+     /// Window length in minutes when provided by the server.
+@@ -79,2 +81,4 @@ impl RateLimitWindowDisplay {
+         let resets_at = resets_at_utc.map(|dt| format_reset_timestamp(dt, captured_at));
++        let reset_after_seconds =
++            resets_at_utc.map(|dt| dt.signed_duration_since(captured_at).num_seconds().max(0));
+ 
+@@ -83,2 +87,3 @@ impl RateLimitWindowDisplay {
+             resets_at,
++            reset_after_seconds,
+             window_minutes: window.window_minutes,
+@@ -360,2 +365,3 @@ mod tests {
+             resets_at: Some("soon".to_string()),
++            reset_after_seconds: None,
+             window_minutes: Some(300),
+@@ -417,2 +423,3 @@ mod tests {
+                 resets_at: Some("soon".to_string()),
++                reset_after_seconds: None,
+                 window_minutes: Some(60),
+@@ -422,2 +429,3 @@ mod tests {
+                 resets_at: Some("later".to_string()),
++                reset_after_seconds: None,
+                 window_minutes: None,
