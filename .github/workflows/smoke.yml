@@ -1,0 +1,129 @@
+name: smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  package:
+    name: package on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: CLI syntax and package checks
+        shell: bash
+        run: |
+          node --check ./bin/codex-hub.js
+          node --check ./lib/cli.js
+          node --check ./lib/patch-launcher.js
+          npm test
+          npm pack --dry-run
+
+      - name: Shell script syntax
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          bash -n scripts/install.sh
+          bash -n scripts/uninstall.sh
+
+      - name: Package install smoke
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/prefix"
+          npm pack --pack-destination "$RUNNER_TEMP"
+          npm install --prefix "$RUNNER_TEMP/prefix" -g "$RUNNER_TEMP"/codex-hub-cli-*.tgz
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            cli="$RUNNER_TEMP/prefix/codex-hub.cmd"
+          else
+            cli="$RUNNER_TEMP/prefix/bin/codex-hub"
+          fi
+          "$cli" --help
+          "$cli" status --json
+
+  macos-launcher:
+    name: macOS launcher patch smoke
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build fake macOS Codex npm package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fake="$RUNNER_TEMP/fake-codex"
+          mkdir -p "$fake/bin"
+
+          arch="$(node -p 'process.arch')"
+          if [[ "$arch" == "arm64" ]]; then
+            triple="aarch64-apple-darwin"
+            platform_package="@openai/codex-darwin-arm64"
+          else
+            triple="x86_64-apple-darwin"
+            platform_package="@openai/codex-darwin-x64"
+          fi
+
+          vendor_dir="$fake/node_modules/$platform_package/vendor/$triple/codex"
+          mkdir -p "$vendor_dir"
+          printf '{"type":"module"}\n' > "$fake/package.json"
+          mkdir -p "$fake/node_modules/$platform_package"
+          printf '{"name":"%s"}\n' "$platform_package" > "$fake/node_modules/$platform_package/package.json"
+
+          curl -fsSL \
+            https://raw.githubusercontent.com/openai/codex/main/codex-cli/bin/codex.js \
+            -o "$fake/bin/codex.js"
+
+          cat > "$vendor_dir/codex" <<'EOF'
+          #!/usr/bin/env sh
+          echo bundled-codex "$@"
+          EOF
+          chmod +x "$vendor_dir/codex"
+
+          cat > "$vendor_dir/codex-hub" <<'EOF'
+          #!/usr/bin/env sh
+          echo codex-hub "$@"
+          EOF
+          chmod +x "$vendor_dir/codex-hub"
+
+          echo "FAKE_CODEX_NPM_ROOT=$fake" >> "$GITHUB_ENV"
+
+      - name: Patch launcher and verify Codex Hub is preferred
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node ./lib/patch-launcher.js "$FAKE_CODEX_NPM_ROOT/bin/codex.js" codex-hub.exe codex-hub
+          grep -q 'codexHubBinaryPath' "$FAKE_CODEX_NPM_ROOT/bin/codex.js"
+
+          output="$(node "$FAKE_CODEX_NPM_ROOT/bin/codex.js" --smoke)"
+          echo "$output"
+          [[ "$output" == "codex-hub --smoke" ]]
+
+      - name: Verify uninstall restores launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bash ./scripts/uninstall.sh --codex-npm-root "$FAKE_CODEX_NPM_ROOT"
+          ! grep -q 'codexHubBinaryPath' "$FAKE_CODEX_NPM_ROOT/bin/codex.js"
+          test ! -e "$(find "$FAKE_CODEX_NPM_ROOT" -type f -path '*/vendor/*/codex/codex-hub' -print -quit)"
