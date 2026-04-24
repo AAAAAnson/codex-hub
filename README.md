@@ -37,9 +37,13 @@ Install Codex through npm if you do not already have it:
 npm install -g @openai/codex
 ```
 
+Use a short working path on Windows. The Codex source tree contains long snapshot filenames, so deeply nested directories can hit Windows path-length limits.
+
 Clone the Codex source tree and this repository:
 
 ```powershell
+mkdir C:\src
+cd C:\src
 git clone https://github.com/openai/codex.git codex-source
 git clone https://github.com/AAAAAnson/codex-hub.git
 cd codex-hub
@@ -112,7 +116,7 @@ Remove the installed HUD binary and restore the launcher backup:
 To remove the source patch from your Codex source checkout:
 
 ```powershell
-git -C ..\codex-source apply --reverse .\patches\codex-hub.patch
+git -C ..\codex-source apply --whitespace=nowarn --reverse .\patches\codex-hub.patch
 ```
 
 **Author**

@@ -103,6 +103,13 @@ const binaryPath = existsSync(codexHubBinaryPath)
         return
     }
 
+    $directTarget = "const binaryPath = path.join(archRoot, `"codex`", codexBinaryName);"
+    if ($normalized.Contains($directTarget)) {
+        $normalized = $normalized.Replace($directTarget, $replacement)
+        Set-Content -LiteralPath $LauncherPath -Value $normalized -NoNewline
+        return
+    }
+
     $start = $normalized.IndexOf($startMarker)
     $endMarker = "// Use an asynchronous spawn instead of spawnSync"
     $end = if ($start -ge 0) { $normalized.IndexOf($endMarker, $start) } else { -1 }
@@ -142,10 +149,10 @@ $cargoRoot = if (Test-Path -LiteralPath (Join-Path $CodexSource "Cargo.toml")) {
 
 Push-Location $CodexSource
 try {
-    if (Test-GitApply -Arguments @("apply", "--check", $patchPath)) {
-        Invoke-Checked -FilePath "git" -Arguments @("apply", $patchPath)
+    if (Test-GitApply -Arguments @("apply", "--whitespace=nowarn", "--check", $patchPath)) {
+        Invoke-Checked -FilePath "git" -Arguments @("apply", "--whitespace=nowarn", $patchPath)
         Write-Host "Applied Codex Hub patch."
-    } elseif (Test-GitApply -Arguments @("apply", "--reverse", "--check", $patchPath)) {
+    } elseif (Test-GitApply -Arguments @("apply", "--whitespace=nowarn", "--reverse", "--check", $patchPath)) {
         Write-Host "Codex Hub patch is already applied."
     } else {
         throw "Patch cannot be applied cleanly. Check your Codex source tree and current local changes."
