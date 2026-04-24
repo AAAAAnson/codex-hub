@@ -1,6 +1,12 @@
 {
   "name": "codex-hub",
   "description": "Codex CLI TUI HUD patch and installer for context, short-window usage, weekly usage, and live status.",
+  "author": {
+    "name": "AAAAAnson",
+    "url": "https://github.com/AAAAAnson"
+  },
+  "homepage": "https://github.com/AAAAAnson/codex-hub",
+  "repository": "https://github.com/AAAAAnson/codex-hub",
   "license": "MIT",
   "keywords": [
     "codex",
@@ -13,7 +19,7 @@
     "displayName": "Codex Hub",
     "shortDescription": "Show a compact Codex HUD below the input box.",
     "longDescription": "Adds a Codex CLI TUI HUD surface that renders context, rolling usage, weekly usage, model, directory, branch, and run state from live Codex runtime data.",
-    "developerName": "codex-hub contributors",
+    "developerName": "AAAAAnson",
     "category": "Productivity",
     "capabilities": [
       "Interactive",
