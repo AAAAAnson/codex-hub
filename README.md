@@ -3,7 +3,7 @@
 Codex Hub is a Codex CLI TUI HUD installer by [AAAAAnson](https://github.com/AAAAAnson). It adds a compact status row below the input area, with context, rolling usage, weekly usage, and runtime status in one place.
 
 ```text
-Context █████ 81% │ Usage █░░░░░░░░░ 5% (4h 41m / 5h) │ Weekly ████░░░░░░ 43% (5d 8h / 7d) · model xhigh fast · ~/repo · Ready
+Context [#####] 81% | Usage [#---------] 5% (4h 41m / 5h) | Weekly [####------] 43% (5d 8h / 7d) | model xhigh fast | ~/repo | Ready
 ```
 
 This repository ships an npm CLI, source patch, and installer scripts. It does not include built Codex binaries, local Codex configuration, session logs, account data, tokens, or machine-specific paths.
@@ -38,16 +38,16 @@ npm install -g @openai/codex
 ```
 
 **Install With npm**
-Install Codex Hub from GitHub:
-
-```powershell
-npm install -g github:AAAAAnson/codex-hub
-```
-
-After the npm registry package is published, this will also work:
+Install Codex Hub from npm:
 
 ```powershell
 npm install -g codex-hub-cli
+```
+
+You can also install the latest GitHub source directly:
+
+```powershell
+npm install -g github:AAAAAnson/codex-hub
 ```
 
 Run the installer:
