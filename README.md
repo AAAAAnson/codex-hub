@@ -1,6 +1,6 @@
 # codex-hub
 
-Codex Hub is a Codex CLI status-line helper plugin by [AAAAAnson](https://github.com/AAAAAnson). It configures a compact status row below the input area with context, rolling usage, weekly usage, model, directory, and runtime state.
+Codex CLI status-line helper plugin by [AAAAAnson](https://github.com/AAAAAnson). It configures Codex's built-in `[tui].status_line` with curated presets (Full / Essential / Minimal) so you get a useful row below the input area without rebuilding Codex.
 
 ```text
 Context 81% used | 5h 95% | weekly 57% | model xhigh fast | ~/repo | Ready
@@ -8,136 +8,184 @@ Context 81% used | 5h 95% | weekly 57% | model xhigh fast | ~/repo | Ready
 
 The default path is plugin-only: no Codex rebuild, no npm launcher patch, and no replacement binary copied into `@openai/codex`. That makes it survive Codex upgrades and avoids conflicts with launch-constrained helper apps such as Computer Use on macOS.
 
-**What It Adds**
-- A Codex plugin manifest and skill.
-- A small npm CLI for configuring Codex's built-in TUI `status_line`.
-- Context, short-window usage, weekly usage, model, directory, and run-state fields.
-- A status check that warns when an old launcher patch is still installed.
+## How Codex's status_line differs from Claude Code's
 
-**How It Works**
-Codex Hub configures Codex's built-in status-line items:
+If you're coming from [claude-hud](https://github.com/jarrodwatts/claude-hud), the API model is different and worth understanding up front:
 
-```toml
-[tui]
-status_line = ["context-used", "five-hour-limit", "weekly-limit", "model-with-reasoning", "current-dir", "run-state"]
+| | Claude Code (`statusLine`) | Codex (`status_line`) |
+|---|---|---|
+| Interface | calls an external command, pipes JSON to stdin, renders stdout as ANSI | takes a list of named built-in items |
+| Multi-line layout | yes, any ANSI | no, single line |
+| Visual progress bars | yes (you draw them) | no |
+| Tools / agents / todos lines | yes (parses transcript) | no |
+| Color / threshold customization | yes | no |
+| Path levels, time format, etc. | yes | no |
+
+**Codex's plugin-only `status_line` is a fixed list of named items.** codex-hub helps you pick and order those items and keeps them stable across upgrades. It cannot draw a multi-line HUD or progress bars — that would require patching and rebuilding Codex (see *Legacy Native HUD* at the bottom).
+
+## Built-in items codex-hub recognizes
+
+```
+context-used        five-hour-limit     weekly-limit
+model-with-reasoning  current-dir       run-state
+git-branch          codex-version       session-id
+fast-mode           used-tokens         total-input-tokens
+total-output-tokens
 ```
 
-It does not scrape session logs. It uses the values Codex already exposes in the TUI.
+Run `codex-hub --list-items` to see the same list at the terminal.
 
-**Requirements**
-- Windows PowerShell or macOS Terminal.
-- Node and npm.
-- Codex installed through npm.
+## Presets
+
+| Preset | What's shown |
+|---|---|
+| **full** | `context-used, five-hour-limit, weekly-limit, model-with-reasoning, codex-version, current-dir, git-branch, run-state` |
+| **essential** *(default)* | `context-used, five-hour-limit, weekly-limit, model-with-reasoning, current-dir, run-state` |
+| **minimal** | `model-with-reasoning, current-dir, run-state` |
+
+Run `codex-hub --list-presets` to see the same listing.
+
+## Install
 
 Install Codex through npm if you do not already have it:
 
-```powershell
+```bash
 npm install -g @openai/codex
 ```
 
-**Install With npm**
-Install Codex Hub from npm:
+Then install codex-hub:
 
-```powershell
+```bash
 npm install -g codex-hub-cli
 ```
 
-That single command installs the `codex-hub` CLI and configures the safe Codex status line.
+That single command installs the `codex-hub` CLI and, when no `[tui].status_line` exists yet in your `~/.codex/config.toml`, applies the **essential** preset. If you already have a custom `status_line`, codex-hub leaves it alone and tells you how to change it.
 
 You can also install the latest GitHub source directly:
 
-```powershell
+```bash
 npm install -g github:AAAAAnson/codex-hub
 ```
 
-Both npm install paths leave the OpenAI-signed Codex launcher untouched and only update your Codex config.
-To skip automatic configuration, set `CODEX_HUB_SKIP_POSTINSTALL=1` during npm install and run `codex-hub install` later.
+To skip the postinstall step entirely, set `CODEX_HUB_SKIP_POSTINSTALL=1` during npm install and run `codex-hub configure` later.
 
-**Use**
+## Use
+
 Restart Codex:
 
-```powershell
+```bash
 codex
 ```
 
 The status line appears below the input box. If usage data is not available yet, wait for Codex to refresh account limit data or send a message to trigger fresh runtime data.
 
+## Configure
+
+Pick a preset:
+
+```bash
+codex-hub configure --preset full
+codex-hub configure --preset essential
+codex-hub configure --preset minimal
+```
+
+Replace with an exact list:
+
+```bash
+codex-hub configure --items "context-used,model-with-reasoning,current-dir,run-state"
+```
+
+Adjust an existing list (preserves order):
+
+```bash
+codex-hub configure --add git-branch,codex-version
+codex-hub configure --remove run-state
+```
+
+Preview without writing:
+
+```bash
+codex-hub configure --preset full --dry-run
+codex-hub preview --preset full
+```
+
+By default codex-hub refuses to overwrite a non-empty existing `status_line`. Pass `--force` if you really want to replace it:
+
+```bash
+codex-hub configure --preset essential --force
+```
+
+## Status
+
 Check the local setup:
 
-```powershell
+```bash
 codex-hub status
+codex-hub status --json
 ```
 
-If `status` reports running legacy HUD processes, exit those old Codex sessions and start `codex` again. Already-running sessions keep their original parent process until they exit.
+The status output reports the current `status_line`, which preset (if any) it matches, whether the legacy launcher is patched, and whether old codex-hub processes are still running.
 
-Repair or reapply the status-line config:
+## Local development
 
-```powershell
-codex-hub install
+When iterating on this repo locally, use the env var to skip postinstall touching your real config:
+
+```bash
+CODEX_HUB_SKIP_POSTINSTALL=1 npm install -g .
 ```
 
-Check that Codex still starts:
+Or run the CLI directly without installing:
 
-```powershell
-codex --help
+```bash
+node ./bin/codex-hub.js status
+node ./bin/codex-hub.js configure --preset full --dry-run
 ```
 
-**Manual Config**
-If you installed with `--no-configure`, add this to your Codex config:
+Run the unit tests:
 
-```toml
-[tui]
-status_line = ["context-used", "five-hour-limit", "weekly-limit", "model-with-reasoning", "current-dir", "run-state"]
+```bash
+npm test
 ```
 
-You can also run:
+## Legacy Native HUD
 
-```powershell
-codex-hub configure --safe-status-line
-```
-
-**Legacy Native HUD**
-The old native HUD is still available as an explicit opt-in:
+Before plugin-only mode existed, codex-hub patched Codex's Rust source to add a custom `codex-hud` status item, then rebuilt Codex and replaced the npm-bundled binary. That mode is still available as an explicit opt-in:
 
 ```bash
 codex-hub install --patch-launcher --codex-source ~/src/codex-source
 ```
 
-Legacy mode:
+This mode:
 
 - Clones or reuses a Codex source checkout.
 - Applies `patches/codex-hub.patch`.
-- Builds `codex-cli`.
+- Builds `codex-cli` (full Rust workspace, large download and build time).
 - Copies the built binary next to the npm-managed Codex binary as `codex-hub.exe` on Windows or `codex-hub` on macOS.
 - Patches the npm launcher to prefer the Codex Hub binary.
 
-This mode may be overwritten by Codex upgrades. On macOS it can conflict with launch-constrained helper apps such as Computer Use because those helpers require an OpenAI-signed parent process.
+**On macOS this conflicts with launch-constrained helper apps such as Computer Use** — those helpers require an OpenAI-signed parent process and refuse to launch from the rebuilt binary. Every Codex upgrade also resets the npm launcher and the bundled binary, so legacy mode needs to be re-applied after each upgrade.
 
-**Uninstall**
-If you only used plugin-only mode, remove the configured status line manually or edit it with `/statusline` in Codex.
+If you used legacy mode and want to undo it:
 
-If you previously used legacy native mode, restore the launcher backup:
-
-```powershell
-codex-hub uninstall
+```bash
+codex-hub uninstall                                # restore the npm launcher backup
+codex-hub uninstall --codex-source ~/src/codex-source   # also reverse the source patch
 ```
 
-If you want to remove the source patch from a custom Codex source checkout:
+## Validation
 
-```powershell
-codex-hub uninstall --codex-source C:\src\codex-source
-```
+Every push runs package checks on Windows and macOS. The plugin-only path verifies the package and CLI without requiring a Codex source build. Unit tests run via `node --test`.
 
-**Validation**
-Every push runs package checks on Windows and macOS. The safe path verifies the package and CLI without requiring a Codex source build.
+## Author
 
-**Author**
 [AAAAAnson](https://github.com/AAAAAnson)
 
-**Privacy**
-Codex Hub does not add telemetry. Keep your own Codex config, auth files, and session logs out of this repository.
+## Privacy
 
-**Notes**
+codex-hub does not add telemetry. Keep your own Codex config, auth files, and session logs out of this repository.
+
+## Notes
+
 - Plugin-only mode is the supported default.
-- Legacy native mode is an escape hatch for users who explicitly want `codex-hud`.
+- Legacy native mode is an escape hatch and is incompatible with macOS Computer Use.
 - This is an unofficial community package, not an OpenAI project.

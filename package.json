@@ -19,7 +19,7 @@
   ],
   "scripts": {
     "postinstall": "node ./bin/codex-hub.js postinstall",
-    "test": "node ./bin/codex-hub.js --help && node ./bin/codex-hub.js status --json",
+    "test": "node ./bin/codex-hub.js --help && node ./bin/codex-hub.js status --json && node --test 'tests/**/*.test.mjs'",
     "pack:check": "npm pack --dry-run"
   },
   "repository": {
