@@ -36,6 +36,8 @@ Check setup:
 codex-hub status
 ```
 
+If running legacy HUD processes are reported, the disk install is clean but old Codex sessions still need to be exited and restarted.
+
 Legacy native HUD mode exists only as an explicit opt-in for users who accept that it rebuilds Codex and patches the npm launcher. It may be overwritten by Codex upgrades and can conflict with launch-constrained helpers such as Computer Use on macOS:
 
 ```bash

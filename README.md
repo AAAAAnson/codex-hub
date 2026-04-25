@@ -68,6 +68,8 @@ Check the local setup:
 codex-hub status
 ```
 
+If `status` reports running legacy HUD processes, exit those old Codex sessions and start `codex` again. Already-running sessions keep their original parent process until they exit.
+
 Repair or reapply the status-line config:
 
 ```powershell
