@@ -146,7 +146,7 @@ MIT — [LICENSE](LICENSE) 참고.
 
 ## 개인정보
 
-codex-hub는 텔레메트리를 추가하지 않습니다. 본인의 Codex 설정·auth 파일·session 로그를 이 repo에 커밋하지 마세요.
+codex-hub는 텔레메트리를 추가하지 않습니다. `~/.codex/config.toml`을 읽고 쓰기만 하는 로컬 전용 CLI입니다.
 
 ## 참고
 

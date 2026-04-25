@@ -146,7 +146,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Privacy
 
-codex-hub does not add telemetry. Keep your own Codex config, auth files, and session logs out of this repository.
+codex-hub does not add telemetry. It is a local-only CLI that reads and writes `~/.codex/config.toml`.
 
 ## Notes
 

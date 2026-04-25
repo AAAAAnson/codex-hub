@@ -146,7 +146,7 @@ MIT，详见 [LICENSE](LICENSE)。
 
 ## 隐私
 
-codex-hub 不带任何 telemetry。不要把你自己的 Codex 配置、auth 文件、session 日志提交到这个 repo。
+codex-hub 不带任何 telemetry。完全本地运行，仅读写 `~/.codex/config.toml`。
 
 ## 说明
 

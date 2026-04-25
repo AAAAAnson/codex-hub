@@ -146,7 +146,7 @@ MIT — [LICENSE](LICENSE) を参照。
 
 ## プライバシー
 
-codex-hub はテレメトリを送信しません。自分の Codex 設定・auth ファイル・session ログをこの repo にコミットしないでください。
+codex-hub はテレメトリを送信しません。`~/.codex/config.toml` の読み書きのみ行う、ローカル専用の CLI です。
 
 ## 注記
 
