@@ -22,6 +22,24 @@ test("PRESETS.essential is the default", () => {
   assert.ok(PRESETS.essential.length > 0);
 });
 
+test("the four named presets exist", () => {
+  for (const name of ["minimal", "essential", "cockpit", "full"]) {
+    assert.ok(PRESETS[name], `missing preset "${name}"`);
+  }
+});
+
+test("presets grow monotonically: minimal ⊂ essential ⊂ cockpit ⊂ full", () => {
+  assert.ok(PRESETS.minimal.length < PRESETS.essential.length);
+  assert.ok(PRESETS.essential.length < PRESETS.cockpit.length);
+  assert.ok(PRESETS.cockpit.length < PRESETS.full.length);
+});
+
+test("no preset includes fast-mode (redundant with model-with-reasoning)", () => {
+  for (const [name, items] of Object.entries(PRESETS)) {
+    assert.ok(!items.includes("fast-mode"), `preset "${name}" should not include fast-mode`);
+  }
+});
+
 test("every preset uses only built-in items", () => {
   const allowed = new Set(ALL_BUILTIN_ITEMS);
   for (const [name, items] of Object.entries(PRESETS)) {

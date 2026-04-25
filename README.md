@@ -37,13 +37,20 @@ Run `codex-hub --list-items` to see the same list at the terminal.
 
 ## Presets
 
-| Preset | What's shown |
-|---|---|
-| **full** | `context-used, five-hour-limit, weekly-limit, model-with-reasoning, codex-version, current-dir, git-branch, run-state` |
-| **essential** *(default)* | `context-used, five-hour-limit, weekly-limit, model-with-reasoning, current-dir, run-state` |
-| **minimal** | `model-with-reasoning, current-dir, run-state` |
+Pick by how much information you want to see at once. Each preset is a strict superset of the lighter one above it, so you can step up gradually.
+
+| Preset | Items | Sample render |
+|---|---|---|
+| **minimal** | `model-with-reasoning, current-dir, run-state` | `gpt-5.5 xhigh fast · ~ · Ready` |
+| **essential** *(default)* | + `context-used, five-hour-limit, weekly-limit` | `Context 41% used · 5h 79% · weekly 38% · gpt-5.5 xhigh fast · ~ · Ready` |
+| **cockpit** | + `total-input-tokens, total-output-tokens, git-branch` | `Context 41% used · 27.2M in · 83K out · 5h 79% · weekly 38% · gpt-5.5 xhigh fast · main · ~ · Ready` |
+| **full** | + `codex-version` | `Context 41% used · 27.2M in · 83K out · 5h 79% · weekly 38% · gpt-5.5 xhigh fast · v0.125.0 · main · ~ · Ready` |
+
+Layout principle: budget axis (context + token counts + limits) → identity (model) → place (branch + cwd) → state. Items that overlap with `model-with-reasoning` (which already encodes fast-mode as a `fast` suffix) are deliberately omitted to avoid duplication.
 
 Run `codex-hub --list-presets` to see the same listing.
+
+Codex's rate-limit segments (`5h`, `weekly`) only render once Codex has fetched usage data, which happens on the first model response in a session. Until then those segments are blank by design.
 
 ## Install
 
