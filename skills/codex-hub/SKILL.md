@@ -19,8 +19,9 @@ Install with npm:
 
 ```powershell
 npm install -g codex-hub-cli
-codex-hub install
 ```
+
+The npm global install runs the safe configuration automatically. Use `codex-hub install` only to repair or reapply the config later.
 
 Configure Codex:
 

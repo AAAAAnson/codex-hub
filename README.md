@@ -42,19 +42,16 @@ Install Codex Hub from npm:
 npm install -g codex-hub-cli
 ```
 
+That single command installs the `codex-hub` CLI and configures the safe Codex status line.
+
 You can also install the latest GitHub source directly:
 
 ```powershell
 npm install -g github:AAAAAnson/codex-hub
 ```
 
-Configure the status line:
-
-```powershell
-codex-hub install
-```
-
-This command leaves the OpenAI-signed Codex launcher untouched and only updates your Codex config.
+Both npm install paths leave the OpenAI-signed Codex launcher untouched and only update your Codex config.
+To skip automatic configuration, set `CODEX_HUB_SKIP_POSTINSTALL=1` during npm install and run `codex-hub install` later.
 
 **Use**
 Restart Codex:
@@ -69,6 +66,12 @@ Check the local setup:
 
 ```powershell
 codex-hub status
+```
+
+Repair or reapply the status-line config:
+
+```powershell
+codex-hub install
 ```
 
 Check that Codex still starts:

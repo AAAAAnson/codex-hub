@@ -48,17 +48,17 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/prefix"
+          temp_home="$RUNNER_TEMP/codex-hub-home"
           npm pack --pack-destination "$RUNNER_TEMP"
-          npm install --prefix "$RUNNER_TEMP/prefix" -g "$RUNNER_TEMP"/codex-hub-cli-*.tgz
+          HOME="$temp_home" USERPROFILE="$temp_home" CODEX_HUB_POSTINSTALL_REQUIRED=1 \
+            npm install --prefix "$RUNNER_TEMP/prefix" -g "$RUNNER_TEMP"/codex-hub-cli-*.tgz
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             cli="$RUNNER_TEMP/prefix/codex-hub.cmd"
           else
             cli="$RUNNER_TEMP/prefix/bin/codex-hub"
           fi
           "$cli" --help
-          "$cli" status --json
-          temp_home="$RUNNER_TEMP/codex-hub-home"
-          HOME="$temp_home" USERPROFILE="$temp_home" "$cli" install
+          HOME="$temp_home" USERPROFILE="$temp_home" "$cli" status --json
           grep -q 'context-used' "$temp_home/.codex/config.toml"
           ! grep -q 'codex-hud' "$temp_home/.codex/config.toml"
 

@@ -53,7 +53,7 @@ done
 
 if [[ "$patch_launcher" != "1" ]]; then
   echo "Plugin-only install does not use scripts/install.sh or build Codex." >&2
-  echo "Run 'codex-hub install' for plugin-only setup, or pass --patch-launcher for legacy native HUD mode." >&2
+  echo "Run 'npm install -g codex-hub-cli' for plugin-only setup, or pass --patch-launcher for legacy native HUD mode." >&2
   exit 2
 fi
 
