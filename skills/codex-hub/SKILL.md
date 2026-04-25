@@ -1,18 +1,18 @@
 ---
 name: codex-hub
-description: Install, configure, or explain the Codex Hub HUD for Codex CLI TUI status.
+description: Configure, check, or explain the Codex Hub status line for Codex CLI TUI.
 ---
 
 # Codex Hub
 
-Use this skill when the user wants to install, configure, debug, or explain the Codex Hub HUD.
+Use this skill when the user wants to configure, debug, or explain the Codex Hub status line.
 
-The HUD is installed by applying `patches/codex-hub.patch` to a local Codex source checkout, building `codex-cli`, and installing the resulting binary next to the npm-managed Codex binary.
+Default mode is plugin-only: do not patch the Codex npm launcher, do not copy a custom `codex-hub` binary into the Codex package, and do not require users to build Codex from source. Configure Codex's built-in status-line items instead.
 
 Default display:
 
 ```text
-Context █████ 81% │ Usage █░░░░░░░░░ 5% (4h 41m / 5h) │ Weekly ████░░░░░░ 43% (5d 8h / 7d)
+Context 81% used · 5h 95% · weekly 57% · model xhigh fast · ~/repo · Ready
 ```
 
 Install with npm:
@@ -22,21 +22,21 @@ npm install -g codex-hub-cli
 codex-hub install
 ```
 
-Direct source install on Windows:
-
-```powershell
-.\scripts\install.ps1 -CodexSource <path-to-codex-source>
-```
-
-Direct source install on macOS:
-
-```bash
-bash ./scripts/install.sh --codex-source <path-to-codex-source>
-```
-
-After installation, configure Codex:
+Configure Codex:
 
 ```toml
 [tui]
-status_line = ["codex-hud", "model-with-reasoning", "current-dir", "git-branch", "run-state"]
+status_line = ["context-used", "five-hour-limit", "weekly-limit", "model-with-reasoning", "current-dir", "run-state"]
+```
+
+Check setup:
+
+```bash
+codex-hub status
+```
+
+Legacy native HUD mode exists only as an explicit opt-in for users who accept that it rebuilds Codex and patches the npm launcher. It may be overwritten by Codex upgrades and can conflict with launch-constrained helpers such as Computer Use on macOS:
+
+```bash
+codex-hub install --patch-launcher
 ```

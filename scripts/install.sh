@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: install.sh --codex-source <path> [--codex-npm-root <path>] [--binary-name <name>] [--release]
+Usage: install.sh --codex-source <path> [--codex-npm-root <path>] [--binary-name <name>] [--release] [--patch-launcher|--no-patch-launcher]
 EOF
 }
 
@@ -11,6 +11,7 @@ codex_source=""
 codex_npm_root=""
 binary_name="codex-hub"
 release=0
+patch_launcher=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,6 +31,14 @@ while [[ $# -gt 0 ]]; do
       release=1
       shift
       ;;
+    --patch-launcher)
+      patch_launcher=1
+      shift
+      ;;
+    --no-patch-launcher)
+      patch_launcher=0
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -41,6 +50,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$patch_launcher" != "1" ]]; then
+  echo "Plugin-only install does not use scripts/install.sh or build Codex." >&2
+  echo "Run 'codex-hub install' for plugin-only setup, or pass --patch-launcher for legacy native HUD mode." >&2
+  exit 2
+fi
 
 if [[ -z "$codex_source" ]]; then
   echo "--codex-source is required" >&2
@@ -128,4 +143,3 @@ node "$repo_root/lib/patch-launcher.js" "$launcher_path" "codex-hub.exe" "$binar
 
 echo "Installed Codex Hub binary: $target_binary"
 echo "Restart Codex after adding codex-hud to your [tui].status_line config."
-

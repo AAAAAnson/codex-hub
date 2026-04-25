@@ -7,11 +7,17 @@ param(
 
     [string]$BinaryName = "codex-hub.exe",
 
-    [switch]$Release
+    [switch]$Release,
+
+    [switch]$PatchLauncher
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if (-not $PatchLauncher) {
+    throw "Plugin-only install does not use scripts/install.ps1 or build Codex. Run 'codex-hub install' for plugin-only setup, or pass -PatchLauncher for legacy native HUD mode."
+}
 
 function Resolve-ExistingPath {
     param(

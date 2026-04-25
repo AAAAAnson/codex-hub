@@ -1,6 +1,6 @@
 {
   "name": "codex-hub",
-  "description": "Codex CLI TUI HUD patch and installer for context, short-window usage, weekly usage, and live status.",
+  "description": "Codex CLI status-line helper plugin for context, short-window usage, weekly usage, and live status.",
   "author": {
     "name": "AAAAAnson",
     "url": "https://github.com/AAAAAnson"
@@ -17,8 +17,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex Hub",
-    "shortDescription": "Show a compact Codex HUD below the input box.",
-    "longDescription": "Adds a Codex CLI TUI HUD surface that renders context, rolling usage, weekly usage, model, directory, branch, and run state from live Codex runtime data.",
+    "shortDescription": "Configure a compact Codex status line.",
+    "longDescription": "Configures Codex CLI's built-in TUI status-line items for context, rolling usage, weekly usage, model, directory, and run state without patching or rebuilding Codex.",
     "developerName": "AAAAAnson",
     "category": "Productivity",
     "capabilities": [
@@ -26,8 +26,8 @@
       "Read"
     ],
     "defaultPrompt": [
-      "Install the Codex Hub HUD",
-      "Explain the Codex Hub HUD fields",
+      "Configure the Codex Hub status line",
+      "Explain the Codex Hub status fields",
       "Check Codex Hub setup"
     ],
     "brandColor": "#10A37F",
