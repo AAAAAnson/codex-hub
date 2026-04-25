@@ -73,13 +73,14 @@ jobs:
           echo "CODEX_SOURCE=$codex_source" >> "$GITHUB_ENV"
           git -C "$codex_source" rev-parse --short HEAD
 
-      - name: Run full Codex Hub installer
+      - name: Run full legacy Codex Hub installer
         shell: bash
         run: |
           set -euo pipefail
 
           args=(
             install
+            --patch-launcher
             --codex-source "$CODEX_SOURCE"
             --npm-root "$CODEX_NPM_ROOT"
             --no-configure

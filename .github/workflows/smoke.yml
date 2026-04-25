@@ -57,6 +57,10 @@ jobs:
           fi
           "$cli" --help
           "$cli" status --json
+          temp_home="$RUNNER_TEMP/codex-hub-home"
+          HOME="$temp_home" USERPROFILE="$temp_home" "$cli" install
+          grep -q 'context-used' "$temp_home/.codex/config.toml"
+          ! grep -q 'codex-hud' "$temp_home/.codex/config.toml"
 
   macos-launcher:
     name: macOS launcher patch smoke
@@ -213,7 +217,8 @@ jobs:
 
           bash ./scripts/install.sh \
             --codex-source "$RUNNER_TEMP/codex-source" \
-            --codex-npm-root "$FAKE_CODEX_NPM_ROOT"
+            --codex-npm-root "$FAKE_CODEX_NPM_ROOT" \
+            --patch-launcher
 
           test -f "$RUNNER_TEMP/codex-source/codex-rs/tui/src/chatwidget/hud_status.rs"
           output="$(node "$FAKE_CODEX_NPM_ROOT/bin/codex.js" --mac-install-smoke)"
